@@ -22,6 +22,15 @@ window.addEventListener("load", () => {
     document.getElementById('connect').addEventListener("click", bleReader.connectBMS);
     document.getElementById('disconnect').addEventListener("click", bleReader.disconnectBMS);
 
+    // Attempt to reconnect to previously authorized device
+    bleReader.reconnectBMS().then((reconnected) => {
+        if (reconnected) {
+            console.log("Successfully reconnected to BMS");
+        } else {
+            console.log("No previous connection found, click Connect to pair");
+        }
+    });
+
     // View switching
     const dashboardView = document.getElementById('dashboardView');
     const historyView = document.getElementById('historyView');

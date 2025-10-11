@@ -52,10 +52,13 @@ class JDBBMSReader {
   // holds last message packet when adding packets.
   _receivedData = undefined;
   _listeners = {};
+  _device = null;
+  _pollInterval = null;
 
   constructor() {
     this.connectBMS = this.connectBMS.bind(this);
     this.disconnectBMS = this.disconnectBMS.bind(this);
+    this.reconnectBMS = this.reconnectBMS.bind(this);
   }
 
   async connectBMS() {
@@ -68,48 +71,115 @@ class JDBBMSReader {
       console.log("with " + JSON.stringify(options));
       const device = await navigator.bluetooth.requestDevice(options);
 
-      console.log("> Name:             " + device.name);
-      console.log("> Id:               " + device.id);
-      console.log("> Connected:        " + device.gatt.connected);
-
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(JDBBMSReader.bmsService);
-
-      const Rx = await service.getCharacteristic(JDBBMSReader.bmsRx);
-      const Tx = await service.getCharacteristic(JDBBMSReader.bmsTx);
-
-      await Rx.startNotifications();
-      const that = this;
-      function rxMessage(event) {
-        that._processMessage(new Uint8Array(event.target.value.buffer));
-        console.log("Received: " + new Uint8Array(event.target.value.buffer));
-      }
-
-      Rx.addEventListener("characteristicvaluechanged", rxMessage);
-      await Tx.writeValue(JDBBMSReader.pass);
-
-      let lastMessage = Uint8Array.of(0);
-      async function pullData() {
-        if (lastMessage == JDBBMSReader.readReg4) {
-          lastMessage = JDBBMSReader.readReg3;
-        } else {
-          lastMessage = JDBBMSReader.readReg4;
-        }
-
-        await Tx.writeValue(lastMessage);
-      }
-
-      setInterval(function () {
-        pullData();
-      }, 3000);
-
-      this._emitEvent("connected", 1);
+      await this._setupDevice(device);
     } catch (error) {
       console.log("Error connecting to BMS " + error);
     }
   }
 
-  async disconnectBMS() {}
+  async reconnectBMS() {
+    try {
+      // Try to get previously authorized devices
+      if (navigator.bluetooth.getDevices) {
+        const devices = await navigator.bluetooth.getDevices();
+        console.log("Found " + devices.length + " previously authorized device(s)");
+        
+        // Try to reconnect to a JBD device
+        for (const device of devices) {
+          if (device.name && device.name.startsWith("JBD")) {
+            console.log("Attempting to reconnect to: " + device.name);
+            await this._setupDevice(device);
+            return true;
+          }
+        }
+      }
+      console.log("No previously authorized devices found");
+      return false;
+    } catch (error) {
+      console.log("Error reconnecting to BMS: " + error);
+      return false;
+    }
+  }
+
+  async _setupDevice(device) {
+    console.log("> Name:             " + device.name);
+    console.log("> Id:               " + device.id);
+    console.log("> Connected:        " + device.gatt.connected);
+
+    // Store device reference
+    this._device = device;
+
+    // Set up disconnect handler
+    device.addEventListener('gattserverdisconnected', () => {
+      console.log('Device disconnected');
+      this._emitEvent("connected", 0);
+      if (this._pollInterval) {
+        clearInterval(this._pollInterval);
+        this._pollInterval = null;
+      }
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(JDBBMSReader.bmsService);
+
+    const Rx = await service.getCharacteristic(JDBBMSReader.bmsRx);
+    const Tx = await service.getCharacteristic(JDBBMSReader.bmsTx);
+
+    await Rx.startNotifications();
+    const that = this;
+    function rxMessage(event) {
+      that._processMessage(new Uint8Array(event.target.value.buffer));
+      console.log("Received: " + new Uint8Array(event.target.value.buffer));
+    }
+
+    Rx.addEventListener("characteristicvaluechanged", rxMessage);
+    await Tx.writeValue(JDBBMSReader.pass);
+
+    let lastMessage = Uint8Array.of(0);
+    async function pullData() {
+      if (lastMessage == JDBBMSReader.readReg4) {
+        lastMessage = JDBBMSReader.readReg3;
+      } else {
+        lastMessage = JDBBMSReader.readReg4;
+      }
+
+      try {
+        await Tx.writeValue(lastMessage);
+      } catch (error) {
+        console.log("Error writing to device: " + error);
+      }
+    }
+
+    // Clear any existing interval
+    if (this._pollInterval) {
+      clearInterval(this._pollInterval);
+    }
+
+    this._pollInterval = setInterval(function () {
+      pullData();
+    }, 3000);
+
+    this._emitEvent("connected", 1);
+  }
+
+  async disconnectBMS() {
+    try {
+      if (this._pollInterval) {
+        clearInterval(this._pollInterval);
+        this._pollInterval = null;
+      }
+      
+      if (this._device && this._device.gatt.connected) {
+        console.log("Disconnecting from device...");
+        await this._device.gatt.disconnect();
+      }
+      
+      this._device = null;
+      this._emitEvent("connected", 0);
+    } catch (error) {
+      console.log("Error disconnecting from BMS: " + error);
+    }
+  }
 
   _processMessage(dataUInt8) {
     // Single line
