@@ -208,7 +208,7 @@ class TimeSeriesManager {
                 current.update(statusUpdate.current);
                 power.update(statusUpdate.voltage * statusUpdate.current);
                 stateOfCharge.update(statusUpdate.capacity.stateOfCharge);
-                chargeRemaining.update(statusUpdate.capacity.fullCapacity);
+                chargeRemaining.update(statusUpdate.packBalCap);
 
                 // Dynamically create temperature metrics if needed
                 if (this.tempSensorCount !== statusUpdate.tempSensorCount) {
@@ -347,8 +347,7 @@ class VoltagesGraph {
         const x = d3.scaleTime(d3.extent(data, d => d.date), [marginLeft, width - marginRight]).nice();
 
         // Declare the y (vertical position) scale.
-        //d3.extent(data, d => d.voltageV);
-        const y = d3.scaleLinear([12,14],[height - marginBottom, marginTop]).nice();
+        const y = d3.scaleLinear(d3.extent(data, d => d.voltageV),[height - marginBottom, marginTop]).nice();
 
 
         // Declare the line generator.
@@ -662,7 +661,7 @@ class ChargeRemainingGraph {
               .attr("y", 10)
               .attr("fill", "currentColor")
               .attr("text-anchor", "start")
-              .text("Charge Remaining Ah %"));
+              .text("Charge Remaining Ah"));
 
       // Append a path for the line.
       svg.append("path")
