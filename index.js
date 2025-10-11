@@ -21,6 +21,26 @@ window.addEventListener("load", () => {
     document.getElementById('connect').addEventListener("click", bleReader.connectBMS);
     document.getElementById('disconnect').addEventListener("click", bleReader.disconnectBMS);
 
+    // View switching
+    const dashboardView = document.getElementById('dashboardView');
+    const historyView = document.getElementById('historyView');
+    const viewBmsBtn = document.getElementById('viewBms');
+    const viewHistoryBtn = document.getElementById('viewHistory');
+
+    document.getElementById('viewBms').addEventListener("click", () => {
+        dashboardView.classList.remove('hidden');
+        historyView.classList.add('hidden');
+        viewBmsBtn.classList.add('view-nav__btn--active');
+        viewHistoryBtn.classList.remove('view-nav__btn--active');
+    });
+
+    document.getElementById('viewHistory').addEventListener("click", () => {
+        dashboardView.classList.add('hidden');
+        historyView.classList.remove('hidden');
+        viewBmsBtn.classList.remove('view-nav__btn--active');
+        viewHistoryBtn.classList.add('view-nav__btn--active');
+    });
+
 
     const setInnerHtmlById = (id, value) => {
         const el = document.getElementById(id);
@@ -51,6 +71,17 @@ window.addEventListener("load", () => {
         }
         setClass('connect',connected,'hidden','');
         setClass('disconnect',connected,'','hidden');
+        
+        // Update connection status badge
+        const statusBadge = document.getElementById('connectionStatus');
+        const statusText = statusBadge.querySelector('.status-badge__text');
+        if (connected) {
+            statusBadge.classList.add('status-badge--connected');
+            statusText.textContent = 'Connected';
+        } else {
+            statusBadge.classList.remove('status-badge--connected');
+            statusText.textContent = 'Disconnected';
+        }
     });
 
     bleReader.on("statusUpdate", (statusUpdate) => {
@@ -59,8 +90,8 @@ window.addEventListener("load", () => {
         setInnerHtmlById("status.capacity.stateOfCharge", statusUpdate.capacity.stateOfCharge.toFixed(0));
         setInnerHtmlById("status.packBalCap", statusUpdate.packBalCap.toFixed(0));
         setInnerHtmlById("status.capacity.fullCapacity", statusUpdate.capacity.fullCapacity.toFixed(0));
-        setClass("status.charging", statusUpdate.FETStatus.charging==1, "enabled", "disabled");
-        setClass("status.discharging", statusUpdate.FETStatus.discharging==1, "enabled", "disabled");
+        setClass("status.charging", statusUpdate.FETStatus.charging==1, "status-indicator__badge--enabled", "status-indicator__badge--disabled");
+        setClass("status.discharging", statusUpdate.FETStatus.discharging==1, "status-indicator__badge--enabled", "status-indicator__badge--disabled");
         setInnerHtmlById("status.chargeCycles", statusUpdate.chargeCycles);
         setInnerHtmlById("status.productionDate", statusUpdate.productionDate.toDateString());
         setInnerHtmlById("status.bmsSWVersion", statusUpdate.bmsSWVersion);
@@ -68,15 +99,19 @@ window.addEventListener("load", () => {
         setInnerHtmlById("status.tempSensorCount", statusUpdate.tempSensorCount.toFixed(0));
         setInnerHtmlById("status.chemistry", statusUpdate.chemistry);
         for (var i = 0; i < statusUpdate.balanceActive.length; i++) {
-            setClass('status.balanceActive'+i,statusUpdate.balanceActive[i]==1, "enabled", "disabled");
+            setClass('status.balanceActive'+i,statusUpdate.balanceActive[i]==1, "balance-indicator--enabled", "balance-indicator--disabled");
         }
         for (var i = 0; i < statusUpdate.tempSensorValues.length; i++) {
             setInnerHtmlById('status.tempSensorValues'+i,statusUpdate.tempSensorValues[i].toFixed(1));
         }
         for( var k in statusUpdate.currentErrors) {
-            setClass('status.errors.'+k, statusUpdate.currentErrors[k]==1, "enabled", "disabled");
+            setClass('status.errors.'+k, statusUpdate.currentErrors[k]==1, "protection-badge--enabled", "protection-badge--disabled");
         }
-        setInnerHtmlById("status.lastUpdate", (new Date()).toString());
+        
+        // Format timestamp better
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString();
+        setInnerHtmlById("status.lastUpdate", timeStr);
 
     });
     bleReader.on("cellUpdate", (cellUpdate) => {
@@ -90,7 +125,11 @@ window.addEventListener("load", () => {
         const range = cellMax - cellMin;
         setInnerHtmlById('cell.range', `${(0.001*cellMin).toFixed(3)} - ${(0.001*cellMax).toFixed(3)}`);
         setInnerHtmlById('cell.diff', (0.001*range).toFixed(3));
-        setInnerHtmlById("status.lastUpdate", (new Date()).toString());
+        
+        // Format timestamp better
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString();
+        setInnerHtmlById("status.lastUpdate", timeStr);
     });
 
     timeSeriesManager.timeSeries.on("update", (history) => {

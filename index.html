@@ -1,100 +1,412 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JBD BMS Monitor</title>
-    <script src="bmsblereader.js" ></script>
-    <script src="history.js" ></script>
+    <script src="bmsblereader.js"></script>
+    <script src="history.js"></script>
     <script src="d3.v7.min.js"></script>
-    <script src="index.js" ></script>
+    <script src="index.js"></script>
     <link rel="stylesheet" type="text/css" href="main.css">
     <link rel="icon" type="image/png" href="/icon144.png">
     <link rel="manifest" href="manifest.json" crossorigin="use-credentials" />
 </head>
 <body>
+    <!-- Header Section -->
+    <header class="app-header">
+        <div class="app-header__container">
+            <div class="app-header__brand">
+                <h1 class="app-header__title">JBD BMS Monitor</h1>
+                <span class="app-header__subtitle">LifePO4 Battery Management</span>
+            </div>
+            
+            <div class="app-header__actions">
+                <button id="connect" class="btn btn--primary">
+                    <span class="btn__icon">⚡</span>
+                    <span class="btn__text">Connect</span>
+                </button>
+                <button id="disconnect" class="btn btn--secondary hidden">
+                    <span class="btn__icon">✕</span>
+                    <span class="btn__text">Disconnect</span>
+                </button>
+            </div>
+            
+            <div class="app-header__status">
+                <span class="status-badge" id="connectionStatus">
+                    <span class="status-badge__indicator"></span>
+                    <span class="status-badge__text">Disconnected</span>
+                </span>
+                <time class="app-header__timestamp" id="status.lastUpdate">Never</time>
+            </div>
+        </div>
+    </header>
 
+    <!-- View Switcher -->
+    <nav class="view-nav">
+        <div class="view-nav__container">
+            <button id="viewBms" class="view-nav__btn view-nav__btn--active">
+                <span class="view-nav__icon">📊</span>
+                <span class="view-nav__text">Dashboard</span>
+            </button>
+            <button id="viewHistory" class="view-nav__btn">
+                <span class="view-nav__icon">📈</span>
+                <span class="view-nav__text">History</span>
+            </button>
+        </div>
+    </nav>
 
-<button id="connect"  >Connect</button>
-<button id="disconnect" class="hidden">Disconnect</button>
+    <!-- Main Dashboard View -->
+    <main class="app-main">
+        <div class="dashboard" id="dashboardView">
+            
+            <!-- Key Metrics Section -->
+            <section class="metrics">
+                <div class="metrics__grid">
+                    
+                    <!-- Battery Status Card -->
+                    <article class="card card--highlight">
+                        <header class="card__header">
+                            <h2 class="card__title">Battery Status</h2>
+                        </header>
+                        <div class="card__body">
+                            <div class="metric metric--large">
+                                <div class="metric__value">
+                                    <span id="status.capacity.stateOfCharge">?</span>
+                                    <span class="metric__unit">%</span>
+                                </div>
+                                <div class="metric__label">State of Charge</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric">
+                                    <div class="metric__value">
+                                        <span id="status.voltage">?</span>
+                                        <span class="metric__unit">V</span>
+                                    </div>
+                                    <div class="metric__label">Voltage</div>
+                                </div>
+                                <div class="metric">
+                                    <div class="metric__value">
+                                        <span id="status.current">?</span>
+                                        <span class="metric__unit">A</span>
+                                    </div>
+                                    <div class="metric__label">Current</div>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
 
-<div class="views">
-    <button id="viewBms"  >Bms</button>
-    <button id="viewHistory"  >Voltages</button>
-<div>
+                    <!-- Capacity Card -->
+                    <article class="card">
+                        <header class="card__header">
+                            <h2 class="card__title">Capacity</h2>
+                        </header>
+                        <div class="card__body">
+                            <div class="metric">
+                                <div class="metric__value">
+                                    <span id="status.capacity.fullCapacity">?</span>
+                                    <span class="metric__unit">Ah</span>
+                                </div>
+                                <div class="metric__label">Available Capacity</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric__value">
+                                    <span id="status.packBalCap">?</span>
+                                    <span class="metric__unit">Ah</span>
+                                </div>
+                                <div class="metric__label">Pack Capacity</div>
+                            </div>
+                        </div>
+                    </article>
 
-<div class="bms">
-<ul class="state">
-    <li>State</li>
-    <li>Voltage: <span id="status.voltage">?</span> V</li>
-    <li>Current: <span id="status.current">?</span> A</li>
-    <li>State Of Charge: <span id="status.capacity.stateOfCharge">?</span> %</li>
-    <li>Full Capacity: <span id="status.capacity.fullCapacity">?</span> Ah</li>
-    <li><span id="status.charging" class="enabled">Charging</span> <span id="status.discharging" class="disabled">Dischaging</span></li>
- </ul>
+                    <!-- Charging Status Card -->
+                    <article class="card">
+                        <header class="card__header">
+                            <h2 class="card__title">Charging Status</h2>
+                        </header>
+                        <div class="card__body">
+                            <div class="status-indicators">
+                                <div class="status-indicator">
+                                    <span id="status.charging" class="status-indicator__badge status-indicator__badge--disabled">
+                                        <span class="status-indicator__icon">⚡</span>
+                                        <span class="status-indicator__text">Charging</span>
+                                    </span>
+                                </div>
+                                <div class="status-indicator">
+                                    <span id="status.discharging" class="status-indicator__badge status-indicator__badge--disabled">
+                                        <span class="status-indicator__icon">🔋</span>
+                                        <span class="status-indicator__text">Discharging</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
 
-  <ul class="cells">
-    <li>Cells</li>
-    <li>0:  <span id="cell.voltage0">0.0</span> V <span id="status.balanceActive0">&#9673;</span></li>
-    <li>1:  <span id="cell.voltage1">0.0</span> V <span id="status.balanceActive1">&#9673;</span></li>
-    <li>2:  <span id="cell.voltage2">0.0</span> V <span id="status.balanceActive2">&#9673;</span></li>
-    <li>3:  <span id="cell.voltage3">0.0</span> V <span id="status.balanceActive3">&#9673;</span></li>
-    <li>Range <span id="cell.range">0.0</span> V</li>
-    <li>Difference <span id="cell.diff">0.0</span> V</li>
+                </div>
+            </section>
 
-  </ul>
-  <ul class="temperatures">
-    <li>Temperatures</li>
-    <li>Board   <span id="status.tempSensorValues0">?</span> C </li>
-    <li>Cell 0  <span id="status.tempSensorValues1">?</span> C </li>
-    <li>Cell 1  <span id="status.tempSensorValues2">?</span> C </li>
-  </ul>
+            <!-- Cell Voltages Section -->
+            <section class="cells-section">
+                <article class="card card--wide">
+                    <header class="card__header">
+                        <h2 class="card__title">Cell Voltages</h2>
+                        <div class="card__header-info">
+                            <span class="info-item">
+                                <span class="info-item__label">Range:</span>
+                                <span class="info-item__value" id="cell.range">0.0</span>
+                                <span class="info-item__unit">V</span>
+                            </span>
+                            <span class="info-item">
+                                <span class="info-item__label">Diff:</span>
+                                <span class="info-item__value" id="cell.diff">0.0</span>
+                                <span class="info-item__unit">V</span>
+                            </span>
+                        </div>
+                    </header>
+                    <div class="card__body">
+                        <div class="cells-grid">
+                            <div class="cell-item">
+                                <div class="cell-item__label">Cell 0</div>
+                                <div class="cell-item__value">
+                                    <span id="cell.voltage0">0.0</span>
+                                    <span class="cell-item__unit">V</span>
+                                </div>
+                                <div class="cell-item__indicator">
+                                    <span id="status.balanceActive0" class="balance-indicator">●</span>
+                                </div>
+                            </div>
+                            <div class="cell-item">
+                                <div class="cell-item__label">Cell 1</div>
+                                <div class="cell-item__value">
+                                    <span id="cell.voltage1">0.0</span>
+                                    <span class="cell-item__unit">V</span>
+                                </div>
+                                <div class="cell-item__indicator">
+                                    <span id="status.balanceActive1" class="balance-indicator">●</span>
+                                </div>
+                            </div>
+                            <div class="cell-item">
+                                <div class="cell-item__label">Cell 2</div>
+                                <div class="cell-item__value">
+                                    <span id="cell.voltage2">0.0</span>
+                                    <span class="cell-item__unit">V</span>
+                                </div>
+                                <div class="cell-item__indicator">
+                                    <span id="status.balanceActive2" class="balance-indicator">●</span>
+                                </div>
+                            </div>
+                            <div class="cell-item">
+                                <div class="cell-item__label">Cell 3</div>
+                                <div class="cell-item__value">
+                                    <span id="cell.voltage3">0.0</span>
+                                    <span class="cell-item__unit">V</span>
+                                </div>
+                                <div class="cell-item__indicator">
+                                    <span id="status.balanceActive3" class="balance-indicator">●</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </section>
 
-  <ul class="errors">
-    <li>Protections</li>
-    <li class="disabled" id="status.errors.singleCellOvervolt">singleCellOvervolt</li>
-    <li class="disabled" id="status.errors.singleCellUndervolt">singleCellUndervolt</li>
-    <li class="disabled" id="status.errors.packOvervolt">packOvervolt</li>
-    <li class="disabled" id="status.errors.packUndervolt">packUndervolt</li>
-    <li class="disabled" id="status.errors.chargeOvertemp">chargeOvertemp</li>
-    <li class="disabled" id="status.errors.chargeUndertemp">chargeUndertemp</li>
-    <li class="disabled" id="status.errors.dischargeOvertemp">dischargeOvertemp</li>
-    <li class="disabled" id="status.errors.dischargeUndertemp">dischargeUndertemp</li>
-    <li class="disabled" id="status.errors.chargeOvercurrent">chargeOvercurrent</li>
-    <li class="disabled" id="status.errors.dischargeOvercurrent">dischargeOvercurrent</li>
-    <li class="disabled" id="status.errors.shortCircut">shortCircut</li>
-    <li class="disabled" id="status.errors.frontEndDetectionICError">frontEndDetectionICError</li>
-    <li class="disabled" id="status.errors.softwareLockMOS">softwareLockMOS</li>
-</ul>
+            <!-- Secondary Info Grid -->
+            <section class="secondary-info">
+                <div class="secondary-info__grid">
+                    
+                    <!-- Temperature Card -->
+                    <article class="card">
+                        <header class="card__header">
+                            <h2 class="card__title">🌡️ Temperature</h2>
+                        </header>
+                        <div class="card__body">
+                            <ul class="info-list">
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Board</span>
+                                    <span class="info-list__value">
+                                        <span id="status.tempSensorValues0">?</span> °C
+                                    </span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Cell 0</span>
+                                    <span class="info-list__value">
+                                        <span id="status.tempSensorValues1">?</span> °C
+                                    </span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Cell 1</span>
+                                    <span class="info-list__value">
+                                        <span id="status.tempSensorValues2">?</span> °C
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                    </article>
 
- <ul class="info">
-    <li>Info</li>
-    <li>Chemistry: <span id="status.chemistry">?</span></li>
-    <li>Charge Cycles: <span id="status.chargeCycles">?</span></li>
-    <li>Pack Capacity: <span id="status.packBalCap">?</span> Ah</li>
-    <li>ProductionDate: <span id="status.productionDate">?</span></li>
-    <li>BMS SW Version: <span id="status.bmsSWVersion">?</span></li>
-    <li>Number of Cells: <span id="status.numberOfCells">?</span></li>
-    <li>Number of NTC Sensors: <span id="status.tempSensorCount">?</span></li>
-  </ul>
+                    <!-- BMS Info Card -->
+                    <article class="card">
+                        <header class="card__header">
+                            <h2 class="card__title">ℹ️ BMS Info</h2>
+                        </header>
+                        <div class="card__body">
+                            <ul class="info-list">
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Chemistry</span>
+                                    <span class="info-list__value" id="status.chemistry">?</span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Charge Cycles</span>
+                                    <span class="info-list__value" id="status.chargeCycles">?</span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Production Date</span>
+                                    <span class="info-list__value" id="status.productionDate">?</span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">SW Version</span>
+                                    <span class="info-list__value" id="status.bmsSWVersion">?</span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Number of Cells</span>
+                                    <span class="info-list__value" id="status.numberOfCells">?</span>
+                                </li>
+                                <li class="info-list__item">
+                                    <span class="info-list__label">Temp Sensors</span>
+                                    <span class="info-list__value" id="status.tempSensorCount">?</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </article>
 
-</div>
-<div id="status.lastUpdate"></div>
+                    <!-- Protection Status Card -->
+                    <article class="card card--span-2">
+                        <header class="card__header">
+                            <h2 class="card__title">🛡️ Protection Status</h2>
+                        </header>
+                        <div class="card__body">
+                            <div class="protection-grid">
+                                <div class="protection-item">
+                                    <span id="status.errors.singleCellOvervolt" class="protection-badge protection-badge--disabled">
+                                        Cell Overvolt
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.singleCellUndervolt" class="protection-badge protection-badge--disabled">
+                                        Cell Undervolt
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.packOvervolt" class="protection-badge protection-badge--disabled">
+                                        Pack Overvolt
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.packUndervolt" class="protection-badge protection-badge--disabled">
+                                        Pack Undervolt
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.chargeOvertemp" class="protection-badge protection-badge--disabled">
+                                        Charge Overtemp
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.chargeUndertemp" class="protection-badge protection-badge--disabled">
+                                        Charge Undertemp
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.dischargeOvertemp" class="protection-badge protection-badge--disabled">
+                                        Discharge Overtemp
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.dischargeUndertemp" class="protection-badge protection-badge--disabled">
+                                        Discharge Undertemp
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.chargeOvercurrent" class="protection-badge protection-badge--disabled">
+                                        Charge Overcurrent
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.dischargeOvercurrent" class="protection-badge protection-badge--disabled">
+                                        Discharge Overcurrent
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.shortCircut" class="protection-badge protection-badge--disabled">
+                                        Short Circuit
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.frontEndDetectionICError" class="protection-badge protection-badge--disabled">
+                                        IC Error
+                                    </span>
+                                </div>
+                                <div class="protection-item">
+                                    <span id="status.errors.softwareLockMOS" class="protection-badge protection-badge--disabled">
+                                        Software Lock
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
 
+                </div>
+            </section>
 
-<div class="history" >
-    <div id="packVoltageGraph" ></div>
-    <div id="cellVoltagesGraph" ></div>
-    <div id="currentGraph" ></div>
-    <div id="temperatureGraph" ></div>
-    <div id="stateOfChargeGraph" ></div>
-    <div id="chargeRemainingGraph" ></div>
+        </div>
 
-</div>
+        <!-- History View -->
+        <div class="history-view hidden" id="historyView">
+            <div class="graph-container">
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">Pack Voltage</h3>
+                    </div>
+                    <div class="graph-card__body" id="packVoltageGraph"></div>
+                </div>
+                
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">Cell Voltages</h3>
+                    </div>
+                    <div class="graph-card__body" id="cellVoltagesGraph"></div>
+                </div>
+                
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">Current</h3>
+                    </div>
+                    <div class="graph-card__body" id="currentGraph"></div>
+                </div>
+                
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">Temperature</h3>
+                    </div>
+                    <div class="graph-card__body" id="temperatureGraph"></div>
+                </div>
+                
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">State of Charge</h3>
+                    </div>
+                    <div class="graph-card__body" id="stateOfChargeGraph"></div>
+                </div>
+                
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">Charge Remaining</h3>
+                    </div>
+                    <div class="graph-card__body" id="chargeRemainingGraph"></div>
+                </div>
+            </div>
+        </div>
 
-
-<script type="text/javascript">
-</script>
+    </main>
 
 </body>
 </html>
