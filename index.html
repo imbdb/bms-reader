@@ -92,6 +92,13 @@
                                     </div>
                                     <div class="metric__label">Current</div>
                                 </div>
+                                <div class="metric">
+                                    <div class="metric__value">
+                                        <span id="status.power">?</span>
+                                        <span class="metric__unit">W</span>
+                                    </div>
+                                    <div class="metric__label">Power</div>
+                                </div>
                             </div>
                         </div>
                     </article>
@@ -107,14 +114,14 @@
                                     <span id="status.capacity.fullCapacity">?</span>
                                     <span class="metric__unit">Ah</span>
                                 </div>
-                                <div class="metric__label">Available Capacity</div>
+                                <div class="metric__label">Full Capacity</div>
                             </div>
                             <div class="metric">
                                 <div class="metric__value">
                                     <span id="status.packBalCap">?</span>
                                     <span class="metric__unit">Ah</span>
                                 </div>
-                                <div class="metric__label">Pack Capacity</div>
+                                <div class="metric__label">Remaining Capacity</div>
                             </div>
                         </div>
                     </article>
@@ -164,47 +171,8 @@
                         </div>
                     </header>
                     <div class="card__body">
-                        <div class="cells-grid">
-                            <div class="cell-item">
-                                <div class="cell-item__label">Cell 0</div>
-                                <div class="cell-item__value">
-                                    <span id="cell.voltage0">0.0</span>
-                                    <span class="cell-item__unit">V</span>
-                                </div>
-                                <div class="cell-item__indicator">
-                                    <span id="status.balanceActive0" class="balance-indicator">●</span>
-                                </div>
-                            </div>
-                            <div class="cell-item">
-                                <div class="cell-item__label">Cell 1</div>
-                                <div class="cell-item__value">
-                                    <span id="cell.voltage1">0.0</span>
-                                    <span class="cell-item__unit">V</span>
-                                </div>
-                                <div class="cell-item__indicator">
-                                    <span id="status.balanceActive1" class="balance-indicator">●</span>
-                                </div>
-                            </div>
-                            <div class="cell-item">
-                                <div class="cell-item__label">Cell 2</div>
-                                <div class="cell-item__value">
-                                    <span id="cell.voltage2">0.0</span>
-                                    <span class="cell-item__unit">V</span>
-                                </div>
-                                <div class="cell-item__indicator">
-                                    <span id="status.balanceActive2" class="balance-indicator">●</span>
-                                </div>
-                            </div>
-                            <div class="cell-item">
-                                <div class="cell-item__label">Cell 3</div>
-                                <div class="cell-item__value">
-                                    <span id="cell.voltage3">0.0</span>
-                                    <span class="cell-item__unit">V</span>
-                                </div>
-                                <div class="cell-item__indicator">
-                                    <span id="status.balanceActive3" class="balance-indicator">●</span>
-                                </div>
-                            </div>
+                        <div class="cells-grid" id="cellsGrid">
+                            <!-- Cells will be dynamically generated -->
                         </div>
                     </div>
                 </article>
@@ -220,25 +188,8 @@
                             <h2 class="card__title">🌡️ Temperature</h2>
                         </header>
                         <div class="card__body">
-                            <ul class="info-list">
-                                <li class="info-list__item">
-                                    <span class="info-list__label">Board</span>
-                                    <span class="info-list__value">
-                                        <span id="status.tempSensorValues0">?</span> °C
-                                    </span>
-                                </li>
-                                <li class="info-list__item">
-                                    <span class="info-list__label">Cell 0</span>
-                                    <span class="info-list__value">
-                                        <span id="status.tempSensorValues1">?</span> °C
-                                    </span>
-                                </li>
-                                <li class="info-list__item">
-                                    <span class="info-list__label">Cell 1</span>
-                                    <span class="info-list__value">
-                                        <span id="status.tempSensorValues2">?</span> °C
-                                    </span>
-                                </li>
+                            <ul class="info-list" id="temperatureList">
+                                <!-- Temperature sensors will be dynamically generated -->
                             </ul>
                         </div>
                     </article>
@@ -381,6 +332,13 @@
                         <h3 class="graph-card__title">Current</h3>
                     </div>
                     <div class="graph-card__body" id="currentGraph"></div>
+                </div>
+                
+                <div class="graph-card">
+                    <div class="graph-card__header">
+                        <h3 class="graph-card__title">Power</h3>
+                    </div>
+                    <div class="graph-card__body" id="powerGraph"></div>
                 </div>
                 
                 <div class="graph-card">

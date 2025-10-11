@@ -173,54 +173,78 @@ class TimeSeries {
 class TimeSeriesManager {
     constructor(dataSource, mock) {
         this.mock = mock;
+        this.numberOfCells = 0;
+        this.tempSensorCount = 0;
+        this.cellVoltageMetrics = [];
+        this.tempMetrics = [];
+        
         const voltage = new Metric("voltageV",2);
         const current = new Metric("currentA",1);
-        const cell0Voltage = new Metric("cell0V",3);
-        const cell1Voltage = new Metric("cell1V",3);
-        const cell2Voltage = new Metric("cell2V",3);
-        const cell3Voltage = new Metric("cell3V",3);
-        const boardTemp = new Metric("boardTempC",1);
-        const cells0Temp = new Metric("cell0C",1);
-        const cells1Temp = new Metric("cell1C",1);
+        const power = new Metric("powerW",1);
         const stateOfCharge = new Metric("soc",0);
         const chargeRemaining = new Metric("chargeAh",0);
+        
+        this.voltage = voltage;
+        this.current = current;
+        this.power = power;
+        this.stateOfCharge = stateOfCharge;
+        this.chargeRemaining = chargeRemaining;
+        
         this.timeSeries = new TimeSeries({
             savePeriod: 30000,
             retentionPeriod: 1800000
         });
         this.timeSeries.addMetric(voltage);
         this.timeSeries.addMetric(current);
-        this.timeSeries.addMetric(cell0Voltage);
-        this.timeSeries.addMetric(cell1Voltage);
-        this.timeSeries.addMetric(cell2Voltage);
-        this.timeSeries.addMetric(cell3Voltage);
-        this.timeSeries.addMetric(boardTemp);
-        this.timeSeries.addMetric(cells0Temp);
-        this.timeSeries.addMetric(cells1Temp);
+        this.timeSeries.addMetric(power);
         this.timeSeries.addMetric(stateOfCharge);
         this.timeSeries.addMetric(chargeRemaining);
+        
         if (this.mock ) {
             this.fakeDataSet();
         } else {
             dataSource.on("statusUpdate", (statusUpdate) => {
                 voltage.update(statusUpdate.voltage);
                 current.update(statusUpdate.current);
-                boardTemp.update(statusUpdate.tempSensorValues[0]);
-                cells0Temp.update(statusUpdate.tempSensorValues[1]);
-                cells1Temp.update(statusUpdate.tempSensorValues[2]);
+                power.update(statusUpdate.voltage * statusUpdate.current);
                 stateOfCharge.update(statusUpdate.capacity.stateOfCharge);
                 chargeRemaining.update(statusUpdate.capacity.fullCapacity);
 
+                // Dynamically create temperature metrics if needed
+                if (this.tempSensorCount !== statusUpdate.tempSensorCount) {
+                    this.tempSensorCount = statusUpdate.tempSensorCount;
+                    this.tempMetrics = [];
+                    for (let i = 0; i < statusUpdate.tempSensorCount; i++) {
+                        const tempMetric = new Metric(`temp${i}C`, 1);
+                        this.tempMetrics.push(tempMetric);
+                        this.timeSeries.addMetric(tempMetric);
+                    }
+                }
+                
+                // Update temperature values
+                for (let i = 0; i < statusUpdate.tempSensorValues.length && i < this.tempMetrics.length; i++) {
+                    this.tempMetrics[i].update(statusUpdate.tempSensorValues[i]);
+                }
             });
+            
             dataSource.on("cellUpdate", (cellUpdate) => {
-                cell0Voltage.update(cellUpdate.cellMv[0]);
-                cell1Voltage.update(cellUpdate.cellMv[1]);
-                cell2Voltage.update(cellUpdate.cellMv[2]);
-                cell3Voltage.update(cellUpdate.cellMv[3]);
+                // Dynamically create cell voltage metrics if needed
+                if (this.numberOfCells !== cellUpdate.cellMv.length) {
+                    this.numberOfCells = cellUpdate.cellMv.length;
+                    this.cellVoltageMetrics = [];
+                    for (let i = 0; i < this.numberOfCells; i++) {
+                        const cellMetric = new Metric(`cell${i}V`, 3);
+                        this.cellVoltageMetrics.push(cellMetric);
+                        this.timeSeries.addMetric(cellMetric);
+                    }
+                }
+                
+                // Update cell voltage values
+                for (let i = 0; i < cellUpdate.cellMv.length && i < this.cellVoltageMetrics.length; i++) {
+                    this.cellVoltageMetrics[i].update(cellUpdate.cellMv[i]);
+                }
             });
-
         }
-
     }
 
     fakeUpdate(series, value, stdev) {
@@ -660,15 +684,26 @@ class CellVoltagesGraph {
     }
 
     update(history) {
-        if ( history.cell0V === undefined 
-            || history.cell1V === undefined 
-            || history.cell2V === undefined 
-            || history.cell3V === undefined  ) {
-            console.log("No cellMV");
-
+        // Find all cell voltage metrics dynamically
+        const cellMetrics = [];
+        for (let key in history) {
+            if (key.match(/^cell\d+V$/)) {
+                cellMetrics.push(key);
+            }
+        }
+        
+        if (cellMetrics.length === 0) {
+            console.log("No cell voltage data");
             return;
         }
-            // Declare the chart dimensions and margins.
+        
+        // Sort cell metrics by number
+        cellMetrics.sort((a, b) => {
+            const numA = parseInt(a.match(/\d+/)[0]);
+            const numB = parseInt(b.match(/\d+/)[0]);
+            return numA - numB;
+        });
+        
         const width = 400;
         const height = 320;
         const marginTop = 20;
@@ -676,72 +711,63 @@ class CellVoltagesGraph {
         const marginBottom = 30;
         const marginLeft = 40;
 
-        // Declare the x (horizontal position) scale.
+        // Prepare data for each cell
         const data = [];
-        data.push([]);
-        data.push([]);
-        data.push([]);
-        data.push([]);
+        const colors = ['red', 'green', 'blue', 'yellow', 'orange', 'purple', 'cyan', 'magenta'];
         
-        for (var i = 0; i < history.ts.length; i++) {
-            if ( !isNaN(history.cell0V.mean[i]) && history.cell0V.mean[i] ) {
-                data[0].push({date: new Date(history.ts[i]), v:  0.001*history.cell0V.mean[i]});
+        for (let cellKey of cellMetrics) {
+            const cellData = [];
+            for (let i = 0; i < history.ts.length; i++) {
+                if (!isNaN(history[cellKey].mean[i]) && history[cellKey].mean[i]) {
+                    cellData.push({
+                        date: new Date(history.ts[i]), 
+                        v: 0.001 * history[cellKey].mean[i]
+                    });
+                }
             }
-            if ( !isNaN(history.cell1V.mean[i]) && history.cell1V.mean[i] ) {
-                data[1].push({date: new Date(history.ts[i]), v:  0.001*history.cell1V.mean[i]});
-            }
-            if ( !isNaN(history.cell2V.mean[i]) && history.cell2V.mean[i] ) {
-                data[2].push({date: new Date(history.ts[i]), v:  0.001*history.cell2V.mean[i]});
-            }
-            if ( !isNaN(history.cell3V.mean[i]) && history.cell3V.mean[i] ) {
-                data[3].push({date: new Date(history.ts[i]), v:  0.001*history.cell2V.mean[i]});
-            }
+            data.push(cellData);
         }
 
-        console.log("Cell Voltage Data ",data);
+        console.log("Cell Voltage Data ", data);
 
-
-        let times = d3.extent(data[0], d => d.date)
-        times = times.concat(d3.extent(data[1], d => d.date));
-        times = times.concat(d3.extent(data[2], d => d.date));
-        times = times.concat(d3.extent(data[3], d => d.date));
+        // Calculate time extents
+        let times = [];
+        for (let cellData of data) {
+            if (cellData.length > 0) {
+                times = times.concat(d3.extent(cellData, d => d.date));
+            }
+        }
         const x = d3.scaleTime(d3.extent(times), [marginLeft, width - marginRight]).nice();
 
-        console.log(x.domain());
-        // Declare the y (vertical position) scale.
-        let voltages = d3.extent(data[0], d => d.cell0Voltage);
-        voltages = voltages.concat(d3.extent(data[1], d => d.v));
-        voltages = voltages.concat(d3.extent(data[2], d => d.v));
-        voltages = voltages.concat(d3.extent(data[3], d => d.v));
-        const y = d3.scaleLinear(d3.extent(voltages),[height - marginBottom, marginTop]).nice();
+        // Calculate voltage extents
+        let voltages = [];
+        for (let cellData of data) {
+            if (cellData.length > 0) {
+                voltages = voltages.concat(d3.extent(cellData, d => d.v));
+            }
+        }
+        const y = d3.scaleLinear(d3.extent(voltages), [height - marginBottom, marginTop]).nice();
 
-
-
-        // Declare the line generator.
+        // Declare the line generator
         const line = d3.line()
           .defined(d => (d.v !== 0 && !isNaN(d.v)))
           .x(d => x(d.date))
           .y(d => y(d.v));
 
-
-
-
-
-        // Create the SVG container.
-      // Create the SVG container.
-      const svg = d3.create("svg")
+        // Create the SVG container
+        const svg = d3.create("svg")
           .attr("width", width)
           .attr("height", height)
           .attr("viewBox", [0, 0, width, height])
           .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
 
-      // Add the x-axis.
-      svg.append("g")
+        // Add the x-axis
+        svg.append("g")
           .attr("transform", `translate(0,${height - marginBottom})`)
           .call(d3.axisBottom(x).ticks(width / 80).tickSizeOuter(0));
 
-  // Add the y-axis, remove the domain line, add grid lines and a label.
-      svg.append("g")
+        // Add the y-axis
+        svg.append("g")
           .attr("transform", `translate(${marginLeft},0)`)
           .call(d3.axisLeft(y).ticks(height / 40))
           .call(g => g.select(".domain").remove())
@@ -755,51 +781,30 @@ class CellVoltagesGraph {
               .attr("text-anchor", "start")
               .text("Cell Voltages"));
 
-      // Append a path for the line.
+        // Draw a line for each cell
+        for (let i = 0; i < data.length; i++) {
+            svg.append("path")
+              .attr("fill", "none")
+              .attr("stroke", colors[i % colors.length])
+              .attr("stroke-width", 1.5)
+              .attr("d", line(data[i]));
+        }
 
-      svg.append("path")
-          .attr("fill", "none")
-          .attr("stroke", "red")
-          .attr("stroke-width", 1.5)
-          .attr("d", line(data[0]));
-
-      svg.append("path")
-          .attr("fill", "none")
-          .attr("stroke", "green")
-          .attr("stroke-width", 1.5)
-          .attr("d", line(data[1]));
-
-      svg.append("path")
-          .attr("fill", "none")
-          .attr("stroke", "blue")
-          .attr("stroke-width", 1.5)
-          .attr("d", line(data[2]));
-       svg.append("path")
-          .attr("fill", "none")
-          .attr("stroke", "yellow")
-          .attr("stroke-width", 1.5)
-          .attr("d", line(data[3]));
-
-
-        // Append the SVG element.
+        // Append the SVG element
         document.getElementById("cellVoltagesGraph").replaceChildren(svg.node());
-
     }
 }
 
-class TemperatureGraph {
+class PowerGraph {
     constructor() {
 
     }
 
     update(history) {
-        if ( history.boardTempC === undefined 
-            || history.cell0C === undefined 
-            || history.cell1C === undefined ) {
-            console.log("No cellC");
+        if ( history.powerW === undefined ) {
+            console.log("No power data")
             return;
         }
-            // Declare the chart dimensions and margins.
         const width = 400;
         const height = 320;
         const marginTop = 20;
@@ -809,48 +814,30 @@ class TemperatureGraph {
 
         // Declare the x (horizontal position) scale.
         const data = [];
-        data.push([]);
-        data.push([]);
-        data.push([]);
         for (var i = 0; i < history.ts.length; i++) {
-            if ( !isNaN(history.boardTempC.mean[i]) && history.boardTempC.mean[i] !== 0 ) {
-                data[0].push({date: new Date(history.ts[i]), t:  history.boardTempC.mean[i]});
-            }
-            if ( !isNaN(history.cell0C.mean[i]) && history.cell0C.mean[i] !== 0 ) {
-                data[1].push({date: new Date(history.ts[i]), t:  history.cell0C.mean[i]});
-            }
-            if ( !isNaN(history.cell1C.mean[i]) && history.cell1C.mean[i] !== 0 ) {
-                data[2].push({date: new Date(history.ts[i]), t:  history.cell1C.mean[i]});
+            if ( !isNaN(history.powerW.mean[i]) &&  (history.powerW.mean[i] !== 0)) {
+                data.push({
+                    date: new Date(history.ts[i]),
+                    powerW: history.powerW.mean[i]
+                });
             }
         }
 
-        console.log("Temperatures ",data);
+        console.log("Power Data ",data);
 
+        const x = d3.scaleTime(d3.extent(data, d => d.date), [marginLeft, width - marginRight]).nice();
 
-        let times = d3.extent(data[0], d => d.date)
-        times = times.concat(d3.extent(data[1], d => d.date));
-        times = times.concat(d3.extent(data[2], d => d.date));
-        const x = d3.scaleTime(d3.extent(times), [marginLeft, width - marginRight]).nice();
+        console.log(x.domain());
         // Declare the y (vertical position) scale.
-        let temperatures = d3.extent(data[0], d => d.t);
-        temperatures = temperatures.concat(d3.extent(data[1], d => d.t));
-        temperatures = temperatures.concat(d3.extent(data[2], d => d.t));
-        const y = d3.scaleLinear(d3.extent(temperatures),[height - marginBottom, marginTop]).nice();
-
-
+        const y = d3.scaleLinear(d3.extent(data, d => d.powerW),[height - marginBottom, marginTop]).nice();
 
         // Declare the line generator.
-        const tempLine = d3.line()
-          .defined(d => (d.t !== 0 && !isNaN(d.t)))
+        const powerLine = d3.line()
+          .defined(d => (d.powerW !== 0 && !isNaN(d.powerW)))
           .x(d => x(d.date))
-          .y(d => y(d.t));
-
-
-
-
+          .y(d => y(d.powerW));
 
         // Create the SVG container.
-      // Create the SVG container.
       const svg = d3.create("svg")
           .attr("width", width)
           .attr("height", height)
@@ -875,31 +862,133 @@ class TemperatureGraph {
               .attr("y", 10)
               .attr("fill", "currentColor")
               .attr("text-anchor", "start")
-              .text("Temperatures C"));
+              .text("Power W"));
 
       // Append a path for the line.
-
       svg.append("path")
           .attr("fill", "none")
-          .attr("stroke", "red")
+          .attr("stroke", "steelblue")
           .attr("stroke-width", 1.5)
-          .attr("d", tempLine(data[0]));
-
-      svg.append("path")
-          .attr("fill", "none")
-          .attr("stroke", "green")
-          .attr("stroke-width", 1.5)
-          .attr("d", tempLine(data[1]));
-
-      svg.append("path")
-          .attr("fill", "none")
-          .attr("stroke", "blue")
-          .attr("stroke-width", 1.5)
-          .attr("d", tempLine(data[2]));
-
+          .attr("d", powerLine(data));
 
         // Append the SVG element.
-        document.getElementById("temperatureGraph").replaceChildren(svg.node());
+        document.getElementById("powerGraph").replaceChildren(svg.node());
+    }
+}
 
+class TemperatureGraph {
+    constructor() {
+
+    }
+
+    update(history) {
+        // Find all temperature metrics dynamically
+        const tempMetrics = [];
+        for (let key in history) {
+            if (key.match(/^temp\d+C$/)) {
+                tempMetrics.push(key);
+            }
+        }
+        
+        if (tempMetrics.length === 0) {
+            console.log("No temperature data");
+            return;
+        }
+        
+        // Sort temperature metrics by number
+        tempMetrics.sort((a, b) => {
+            const numA = parseInt(a.match(/\d+/)[0]);
+            const numB = parseInt(b.match(/\d+/)[0]);
+            return numA - numB;
+        });
+        
+        const width = 400;
+        const height = 320;
+        const marginTop = 20;
+        const marginRight = 20;
+        const marginBottom = 30;
+        const marginLeft = 40;
+
+        // Prepare data for each temperature sensor
+        const data = [];
+        const colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'yellow'];
+        
+        for (let tempKey of tempMetrics) {
+            const tempData = [];
+            for (let i = 0; i < history.ts.length; i++) {
+                if (!isNaN(history[tempKey].mean[i]) && history[tempKey].mean[i] !== 0) {
+                    tempData.push({
+                        date: new Date(history.ts[i]), 
+                        t: history[tempKey].mean[i]
+                    });
+                }
+            }
+            data.push(tempData);
+        }
+
+        console.log("Temperature Data ", data);
+
+        // Calculate time extents
+        let times = [];
+        for (let tempData of data) {
+            if (tempData.length > 0) {
+                times = times.concat(d3.extent(tempData, d => d.date));
+            }
+        }
+        const x = d3.scaleTime(d3.extent(times), [marginLeft, width - marginRight]).nice();
+
+        // Calculate temperature extents
+        let temperatures = [];
+        for (let tempData of data) {
+            if (tempData.length > 0) {
+                temperatures = temperatures.concat(d3.extent(tempData, d => d.t));
+            }
+        }
+        const y = d3.scaleLinear(d3.extent(temperatures), [height - marginBottom, marginTop]).nice();
+
+        // Declare the line generator
+        const tempLine = d3.line()
+          .defined(d => (d.t !== 0 && !isNaN(d.t)))
+          .x(d => x(d.date))
+          .y(d => y(d.t));
+
+        // Create the SVG container
+        const svg = d3.create("svg")
+          .attr("width", width)
+          .attr("height", height)
+          .attr("viewBox", [0, 0, width, height])
+          .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
+
+        // Add the x-axis
+        svg.append("g")
+          .attr("transform", `translate(0,${height - marginBottom})`)
+          .call(d3.axisBottom(x).ticks(width / 80).tickSizeOuter(0));
+
+        // Add the y-axis
+        svg.append("g")
+          .attr("transform", `translate(${marginLeft},0)`)
+          .call(d3.axisLeft(y).ticks(height / 40))
+          .call(g => g.select(".domain").remove())
+          .call(g => g.selectAll(".tick line").clone()
+              .attr("x2", width - marginLeft - marginRight)
+              .attr("stroke-opacity", 0.1))
+          .call(g => g.append("text")
+              .attr("x", -marginLeft)
+              .attr("y", 10)
+              .attr("fill", "currentColor")
+              .attr("text-anchor", "start")
+              .text("Temperatures C"));
+
+        // Draw a line for each temperature sensor
+        for (let i = 0; i < data.length; i++) {
+            svg.append("path")
+              .attr("fill", "none")
+              .attr("stroke", colors[i % colors.length])
+              .attr("stroke-width", 1.5)
+              .attr("d", tempLine(data[i]));
+        }
+
+        // Append the SVG element
+        document.getElementById("temperatureGraph").replaceChildren(svg.node());
     }
 }
