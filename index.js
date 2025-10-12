@@ -10,6 +10,7 @@ window.addEventListener("load", () => {
     const bleReader = new JDBBMSReader();
     const timeSeriesManager = new TimeSeriesManager(bleReader);
 
+    // History view graphs
     const voltagesGraph = new VoltagesGraph();
     const cellVoltageGraph =  new CellVoltagesGraph();
     const currentGraph =  new CurrentGraph();
@@ -17,6 +18,12 @@ window.addEventListener("load", () => {
     const temperatureGraph =  new TemperatureGraph();
     const stateOfChargeGraph =  new StateOfChargeGraph();
     const chargeRemainingGraph =  new ChargeRemainingGraph();
+
+    // Dashboard view charts
+    const socDonutChart = new SOCDonutChart('socDonutChart');
+    const cellVoltageBarChart = new CellVoltageBarChart('cellVoltageBarChart');
+    const temperatureBarGauge = new TemperatureBarGauge('temperatureBarGauge');
+    const capacityProgressBar = new CapacityProgressBar('capacityProgressBar');
 
 
     document.getElementById('connect').addEventListener("click", bleReader.connectBMS);
@@ -94,72 +101,62 @@ window.addEventListener("load", () => {
         }
     });
 
-    // Track number of cells and temp sensors for dynamic UI generation
-    let currentNumberOfCells = 0;
-    let currentTempSensorCount = 0;
-
-    // Function to generate cell voltage UI elements
-    const generateCellsUI = (numberOfCells) => {
-        if (currentNumberOfCells === numberOfCells) return; // Already generated
-        currentNumberOfCells = numberOfCells;
-        
-        const cellsGrid = document.getElementById('cellsGrid');
-        cellsGrid.innerHTML = '';
-        
-        for (let i = 0; i < numberOfCells; i++) {
-            const cellItem = document.createElement('div');
-            cellItem.className = 'cell-item';
-            cellItem.innerHTML = `
-                <div class="cell-item__label">Cell ${i + 1}</div>
-                <div class="cell-item__value">
-                    <span id="cell.voltage${i}">0.0</span>
-                    <span class="cell-item__unit">V</span>
-                </div>
-                <div class="cell-item__indicator">
-                    <span id="status.balanceActive${i}" class="balance-indicator">●</span>
-                </div>
-            `;
-            cellsGrid.appendChild(cellItem);
-        }
-    };
-
-    // Function to generate temperature sensor UI elements
-    const generateTemperatureUI = (tempSensorCount) => {
-        if (currentTempSensorCount === tempSensorCount) return; // Already generated
-        currentTempSensorCount = tempSensorCount;
-        
-        const tempList = document.getElementById('temperatureList');
-        tempList.innerHTML = '';
-        
-        const tempLabels = ['Board', 'Cell 0', 'Cell 1', 'Cell 2', 'Cell 3', 'Cell 4', 'Cell 5', 'Cell 6'];
-        
-        for (let i = 0; i < tempSensorCount; i++) {
-            const listItem = document.createElement('li');
-            listItem.className = 'info-list__item';
-            const label = i < tempLabels.length ? tempLabels[i] : `Sensor ${i}`;
-            listItem.innerHTML = `
-                <span class="info-list__label">${label}</span>
-                <span class="info-list__value">
-                    <span id="status.tempSensorValues${i}">?</span> °C
-                </span>
-            `;
-            tempList.appendChild(listItem);
+    // Visual feedback helper function
+    const addValueFlashEffect = (elementId) => {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.classList.add('value-flash');
+            setTimeout(() => element.classList.remove('value-flash'), 300);
         }
     };
 
     bleReader.on("statusUpdate", (statusUpdate) => {
+        // Update text displays
         setInnerHtmlById("status.voltage", statusUpdate.voltage.toFixed(2));
-        setInnerHtmlById("status.current", statusUpdate.current.toFixed(1));
+        addValueFlashEffect("status.voltage");
+        
+        // Update current display
+        setInnerHtmlById("status.current", statusUpdate.current.toFixed(2));
+        addValueFlashEffect("status.current");
         
         // Calculate and display power (V * A = W)
         const power = statusUpdate.voltage * statusUpdate.current;
-        setInnerHtmlById("status.power", power.toFixed(1));
+        setInnerHtmlById("status.power", power.toFixed(2));
+        addValueFlashEffect("status.power");
         
-        setInnerHtmlById("status.capacity.stateOfCharge", statusUpdate.capacity.stateOfCharge.toFixed(0));
-        setInnerHtmlById("status.packBalCap", statusUpdate.packBalCap.toFixed(0));
-        setInnerHtmlById("status.capacity.fullCapacity", statusUpdate.capacity.fullCapacity.toFixed(0));
-        setClass("status.charging", statusUpdate.FETStatus.charging==1, "status-indicator__badge--enabled", "status-indicator__badge--disabled");
-        setClass("status.discharging", statusUpdate.FETStatus.discharging==1, "status-indicator__badge--enabled", "status-indicator__badge--disabled");
+        // Update graphical charts
+        // Determine actual charging/discharging state based on current flow
+        // Positive current = charging, negative current = discharging
+        const currentThreshold = 0.1; // 0.1A threshold to account for noise
+        const isCharging = statusUpdate.current > currentThreshold;
+        const isDischarging = statusUpdate.current < -currentThreshold;
+        
+        // Debug log to verify charging status is correct
+        console.log(`Current: ${statusUpdate.current.toFixed(2)}A, Charging: ${isCharging}, Discharging: ${isDischarging}, FET Status: charge=${statusUpdate.FETStatus.charging} discharge=${statusUpdate.FETStatus.discharging}`);
+        
+        // Update SOC Donut Chart
+        socDonutChart.update(
+            statusUpdate.capacity.stateOfCharge,
+            isCharging,
+            statusUpdate.packBalCap
+        );
+        
+        // Update Capacity Progress Bar
+        capacityProgressBar.update(
+            statusUpdate.packBalCap,
+            statusUpdate.capacity.fullCapacity,
+            statusUpdate.current
+        );
+        
+        // Update Temperature Bar Gauge
+        const tempLabels = ['Board', 'Cell 0', 'Cell 1', 'Cell 2', 'Cell 3', 'Cell 4', 'Cell 5', 'Cell 6'];
+        temperatureBarGauge.update(statusUpdate.tempSensorValues, tempLabels);
+        
+        // Update charging/discharging indicators
+        setClass("status.charging", isCharging, "status-indicator__badge--enabled", "status-indicator__badge--disabled");
+        setClass("status.discharging", isDischarging, "status-indicator__badge--enabled", "status-indicator__badge--disabled");
+        
+        // Update BMS info
         setInnerHtmlById("status.chargeCycles", statusUpdate.chargeCycles);
         setInnerHtmlById("status.productionDate", statusUpdate.productionDate.toDateString());
         setInnerHtmlById("status.bmsSWVersion", statusUpdate.bmsSWVersion);
@@ -167,41 +164,41 @@ window.addEventListener("load", () => {
         setInnerHtmlById("status.tempSensorCount", statusUpdate.tempSensorCount.toFixed(0));
         setInnerHtmlById("status.chemistry", statusUpdate.chemistry);
         
-        // Generate dynamic UI elements if needed
-        generateTemperatureUI(statusUpdate.tempSensorCount);
-        
-        for (var i = 0; i < statusUpdate.balanceActive.length; i++) {
-            setClass('status.balanceActive'+i,statusUpdate.balanceActive[i]==1, "balance-indicator--enabled", "balance-indicator--disabled");
-        }
-        for (var i = 0; i < statusUpdate.tempSensorValues.length; i++) {
-            setInnerHtmlById('status.tempSensorValues'+i,statusUpdate.tempSensorValues[i].toFixed(1));
-        }
-        for( var k in statusUpdate.currentErrors) {
+        // Update protection status
+        for (var k in statusUpdate.currentErrors) {
             setClass('status.errors.'+k, statusUpdate.currentErrors[k]==1, "protection-badge--enabled", "protection-badge--disabled");
         }
         
-        // Format timestamp better
+        // Format timestamp
         const now = new Date();
         const timeStr = now.toLocaleTimeString();
         setInnerHtmlById("status.lastUpdate", timeStr);
-
     });
     bleReader.on("cellUpdate", (cellUpdate) => {
-        // Generate cell UI if not already done
-        generateCellsUI(cellUpdate.cellMv.length);
+        // Update Cell Voltage Bar Chart
+        cellVoltageBarChart.update(cellUpdate.cellMv);
         
-        var cellMax = cellUpdate.cellMv[0];
-        var cellMin = cellUpdate.cellMv[0];
-        for (var i = 0; i < cellUpdate.cellMv.length; i++) {
-            setInnerHtmlById('cell.voltage'+i,(0.001*cellUpdate.cellMv[i]).toFixed(3));
-            cellMax = Math.max(cellMax, cellUpdate.cellMv[i]);
-            cellMin = Math.min(cellMin, cellUpdate.cellMv[i]);
-        }
+        // Calculate range and diff for header display
+        var cellMax = Math.max(...cellUpdate.cellMv);
+        var cellMin = Math.min(...cellUpdate.cellMv);
         const range = cellMax - cellMin;
+        
         setInnerHtmlById('cell.range', `${(0.001*cellMin).toFixed(3)} - ${(0.001*cellMax).toFixed(3)}`);
         setInnerHtmlById('cell.diff', (0.001*range).toFixed(3));
         
-        // Format timestamp better
+        // Add visual feedback animation
+        const rangeElement = document.getElementById('cell.range');
+        const diffElement = document.getElementById('cell.diff');
+        if (rangeElement) {
+            rangeElement.classList.add('value-flash');
+            setTimeout(() => rangeElement.classList.remove('value-flash'), 300);
+        }
+        if (diffElement) {
+            diffElement.classList.add('value-flash');
+            setTimeout(() => diffElement.classList.remove('value-flash'), 300);
+        }
+        
+        // Format timestamp
         const now = new Date();
         const timeStr = now.toLocaleTimeString();
         setInnerHtmlById("status.lastUpdate", timeStr);

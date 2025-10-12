@@ -11,6 +11,7 @@
     <script src="bmsblereader.js"></script>
     <script src="history.js"></script>
     <script src="d3.v7.min.js"></script>
+    <script src="dashboard-charts.js"></script>
     <script src="index.js"></script>
     <link rel="stylesheet" type="text/css" href="main.css">
     <link rel="icon" type="image/png" href="/icon144.png">
@@ -71,37 +72,49 @@
                     <!-- Battery Status Card -->
                     <article class="card card--highlight">
                         <header class="card__header">
-                            <h2 class="card__title">Battery Status</h2>
+                            <h2 class="card__title">⚡ Battery Status</h2>
                         </header>
                         <div class="card__body">
-                            <div class="metric metric--large">
-                                <div class="metric__value">
-                                    <span id="status.capacity.stateOfCharge">?</span>
-                                    <span class="metric__unit">%</span>
+                            <div class="battery-status-grid">
+                                <!-- SOC Donut Chart -->
+                                <div class="battery-status-item">
+                                    <div id="socDonutChart" class="soc-donut-container"></div>
                                 </div>
-                                <div class="metric__label">State of Charge</div>
-                            </div>
-                            <div class="metric-row">
-                                <div class="metric">
-                                    <div class="metric__value">
-                                        <span id="status.voltage">?</span>
-                                        <span class="metric__unit">V</span>
+                                
+                                <!-- Gauges Grid -->
+                                <div class="battery-gauges-grid">
+                                    <!-- Voltage Display -->
+                                    <div class="battery-status-item">
+                                        <div class="metric">
+                                            <div class="metric__value">
+                                                <span id="status.voltage">?</span>
+                                                <span class="metric__unit">V</span>
+                                            </div>
+                                            <div class="metric__label">Pack Voltage</div>
+                                        </div>
                                     </div>
-                                    <div class="metric__label">Voltage</div>
-                                </div>
-                                <div class="metric">
-                                    <div class="metric__value">
-                                        <span id="status.current">?</span>
-                                        <span class="metric__unit">A</span>
+                                    
+                                    <!-- Current Display -->
+                                    <div class="battery-status-item">
+                                        <div class="metric">
+                                            <div class="metric__value">
+                                                <span id="status.current">?</span>
+                                                <span class="metric__unit">A</span>
+                                            </div>
+                                            <div class="metric__label">Current</div>
+                                        </div>
                                     </div>
-                                    <div class="metric__label">Current</div>
-                                </div>
-                                <div class="metric">
-                                    <div class="metric__value">
-                                        <span id="status.power">?</span>
-                                        <span class="metric__unit">W</span>
+                                    
+                                    <!-- Power Display -->
+                                    <div class="battery-status-item">
+                                        <div class="metric">
+                                            <div class="metric__value">
+                                                <span id="status.power">?</span>
+                                                <span class="metric__unit">W</span>
+                                            </div>
+                                            <div class="metric__label">Power</div>
+                                        </div>
                                     </div>
-                                    <div class="metric__label">Power</div>
                                 </div>
                             </div>
                         </div>
@@ -110,23 +123,10 @@
                     <!-- Capacity Card -->
                     <article class="card">
                         <header class="card__header">
-                            <h2 class="card__title">Capacity</h2>
+                            <h2 class="card__title">🔋 Capacity</h2>
                         </header>
                         <div class="card__body">
-                            <div class="metric">
-                                <div class="metric__value">
-                                    <span id="status.capacity.fullCapacity">?</span>
-                                    <span class="metric__unit">Ah</span>
-                                </div>
-                                <div class="metric__label">Full Capacity</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric__value">
-                                    <span id="status.packBalCap">?</span>
-                                    <span class="metric__unit">Ah</span>
-                                </div>
-                                <div class="metric__label">Remaining Capacity</div>
-                            </div>
+                            <div id="capacityProgressBar"></div>
                         </div>
                     </article>
 
@@ -160,7 +160,7 @@
             <section class="cells-section">
                 <article class="card card--wide">
                     <header class="card__header">
-                        <h2 class="card__title">Cell Voltages</h2>
+                        <h2 class="card__title">🔋 Cell Voltages</h2>
                         <div class="card__header-info">
                             <span class="info-item">
                                 <span class="info-item__label">Range:</span>
@@ -175,9 +175,7 @@
                         </div>
                     </header>
                     <div class="card__body">
-                        <div class="cells-grid" id="cellsGrid">
-                            <!-- Cells will be dynamically generated -->
-                        </div>
+                        <div id="cellVoltageBarChart" class="cell-voltage-chart-container"></div>
                     </div>
                 </article>
             </section>
@@ -192,9 +190,7 @@
                             <h2 class="card__title">🌡️ Temperature</h2>
                         </header>
                         <div class="card__body">
-                            <ul class="info-list" id="temperatureList">
-                                <!-- Temperature sensors will be dynamically generated -->
-                            </ul>
+                            <div id="temperatureBarGauge" class="temperature-gauge-container"></div>
                         </div>
                     </article>
 
