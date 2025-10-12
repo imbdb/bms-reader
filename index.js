@@ -34,7 +34,7 @@ window.addEventListener("load", () => {
         if (reconnected) {
             console.log("Successfully reconnected to BMS");
         } else {
-            console.log("No previous connection found, click Connect to pair");
+            console.log("Could not auto-reconnect. Ensure device is powered on and nearby, then click Connect.");
         }
     });
 
@@ -80,11 +80,42 @@ window.addEventListener("load", () => {
         }
     };
 
+    // Track if we've received first data
+    let hasReceivedStatusData = false;
+    let hasReceivedCellData = false;
+    
+    // Helper function to show/hide loaders
+    const showLoaders = () => {
+        document.getElementById('batteryStatusLoader').classList.remove('hidden');
+        document.getElementById('capacityLoader').classList.remove('hidden');
+        document.getElementById('cellVoltageLoader').classList.remove('hidden');
+        document.getElementById('temperatureLoader').classList.remove('hidden');
+        document.getElementById('bmsInfoLoader').classList.remove('hidden');
+        hasReceivedStatusData = false;
+        hasReceivedCellData = false;
+    };
+    
+    const hideStatusLoaders = () => {
+        document.getElementById('batteryStatusLoader').classList.add('hidden');
+        document.getElementById('capacityLoader').classList.add('hidden');
+        document.getElementById('temperatureLoader').classList.add('hidden');
+        document.getElementById('bmsInfoLoader').classList.add('hidden');
+    };
+    
+    const hideCellLoader = () => {
+        document.getElementById('cellVoltageLoader').classList.add('hidden');
+    };
+
     bleReader.on('connected', (connected) => {
         if ( connected ) {
             timeSeriesManager.start();
+            // Show loaders when connected, waiting for data
+            showLoaders();
         } else {
             timeSeriesManager.stop();
+            // Hide loaders on disconnect
+            hideStatusLoaders();
+            hideCellLoader();
         }
         setClass('connect',connected,'hidden','');
         setClass('disconnect',connected,'','hidden');
@@ -111,6 +142,12 @@ window.addEventListener("load", () => {
     };
 
     bleReader.on("statusUpdate", (statusUpdate) => {
+        // Hide loaders on first data receipt
+        if (!hasReceivedStatusData) {
+            hideStatusLoaders();
+            hasReceivedStatusData = true;
+        }
+        
         // Update text displays
         setInnerHtmlById("status.voltage", statusUpdate.voltage.toFixed(2));
         addValueFlashEffect("status.voltage");
@@ -175,6 +212,12 @@ window.addEventListener("load", () => {
         setInnerHtmlById("status.lastUpdate", timeStr);
     });
     bleReader.on("cellUpdate", (cellUpdate) => {
+        // Hide cell voltage loader on first data receipt
+        if (!hasReceivedCellData) {
+            hideCellLoader();
+            hasReceivedCellData = true;
+        }
+        
         // Update Cell Voltage Bar Chart
         cellVoltageBarChart.update(cellUpdate.cellMv);
         

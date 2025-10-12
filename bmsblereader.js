@@ -80,20 +80,42 @@ class JDBBMSReader {
   async reconnectBMS() {
     try {
       // Try to get previously authorized devices
-      if (navigator.bluetooth.getDevices) {
-        const devices = await navigator.bluetooth.getDevices();
-        console.log("Found " + devices.length + " previously authorized device(s)");
+      if (!navigator.bluetooth.getDevices) {
+        console.log("Browser doesn't support getDevices() - reconnection not available");
+        return false;
+      }
+
+      const devices = await navigator.bluetooth.getDevices();
+      
+      if (devices.length === 0) {
+        console.log("No previously authorized devices found");
+        return false;
+      }
+
+      console.log("Found " + devices.length + " previously authorized device(s)");
+      
+      // Try to reconnect to each device
+      for (const device of devices) {
+        console.log("Checking device: " + (device.name || "Unknown") + " (id: " + device.id + ")");
         
-        // Try to reconnect to a JBD device
-        for (const device of devices) {
-          if (device.name && device.name.startsWith("JBD")) {
-            console.log("Attempting to reconnect to: " + device.name);
-            await this._setupDevice(device);
-            return true;
+        // Try to reconnect to the device
+        // Note: device.name might not be available until after connection
+        try {
+          await this._setupDevice(device);
+          console.log("Successfully reconnected to device");
+          return true;
+        } catch (error) {
+          console.log("Failed to reconnect to device " + device.id + ": " + error.name + " - " + error.message);
+          
+          // If it's a GATT error, the device is likely out of range or not advertising
+          if (error.name === "NotSupportedError" || error.name === "NetworkError") {
+            console.log("Device may be out of range, sleeping, or not advertising. Please ensure device is powered on and nearby.");
           }
+          // Continue to next device
         }
       }
-      console.log("No previously authorized devices found");
+      
+      console.log("Could not reconnect to any previously authorized devices. Device may need to be powered on or nearby.");
       return false;
     } catch (error) {
       console.log("Error reconnecting to BMS: " + error);
@@ -101,25 +123,48 @@ class JDBBMSReader {
     }
   }
 
-  async _setupDevice(device) {
+  async _setupDevice(device, retryCount = 0) {
     console.log("> Name:             " + device.name);
     console.log("> Id:               " + device.id);
     console.log("> Connected:        " + device.gatt.connected);
 
-    // Store device reference
+    // Connect to GATT server first
+    let server;
+    if (device.gatt.connected) {
+      console.log("Device already connected, reusing connection");
+      server = device.gatt;
+    } else {
+      // Try to connect with timeout
+      console.log("Attempting to connect to GATT server...");
+      try {
+        server = await device.gatt.connect();
+      } catch (error) {
+        // If connection fails and we haven't exceeded retry limit, try again
+        if (retryCount < 2) {
+          console.log(`Connection attempt ${retryCount + 1} failed, retrying in 1 second...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return this._setupDevice(device, retryCount + 1);
+        }
+        throw error;
+      }
+    }
+
+    // Store device reference only after successful connection
     this._device = device;
 
-    // Set up disconnect handler
-    device.addEventListener('gattserverdisconnected', () => {
-      console.log('Device disconnected');
-      this._emitEvent("connected", 0);
-      if (this._pollInterval) {
-        clearInterval(this._pollInterval);
-        this._pollInterval = null;
-      }
-    });
+    // Set up disconnect handler (only add once) after successful connection
+    if (!device._disconnectHandlerAdded) {
+      device.addEventListener('gattserverdisconnected', () => {
+        console.log('Device disconnected');
+        this._emitEvent("connected", 0);
+        if (this._pollInterval) {
+          clearInterval(this._pollInterval);
+          this._pollInterval = null;
+        }
+      });
+      device._disconnectHandlerAdded = true;
+    }
 
-    const server = await device.gatt.connect();
     const service = await server.getPrimaryService(JDBBMSReader.bmsService);
 
     const Rx = await service.getCharacteristic(JDBBMSReader.bmsRx);

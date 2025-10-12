@@ -95,7 +95,7 @@ class TimeSeries {
         };
     }
     stop() {
-        cancelInterval(this.saveInterval);
+        clearInterval(this.saveInterval);
     }
     start() {
         this.saveInterval = setInterval(() => {
